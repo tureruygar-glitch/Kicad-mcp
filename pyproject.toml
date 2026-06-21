@@ -1,0 +1,20 @@
+[project]
+name = "kicad10-mcp"
+version = "0.1.0"
+description = "Full-control MCP server for KiCad 10 via the IPC API (kicad-python / kipy) and kicad-cli."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.10",
+    "kicad-python>=0.7.1",
+]
+
+[project.scripts]
+kicad10-mcp = "kicad10_mcp.server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["kicad10_mcp"]
