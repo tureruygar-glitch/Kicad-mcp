@@ -5,7 +5,7 @@ API'sini (`kicad-python` / `kipy`) ve `kicad-cli`'yi sararak PCB editörü,
 şematik editörü, proje ayarları, ağlar (nets), katmanlar, tasarım verisi,
 üretim çıktıları ve ham bir betik çalıştırma kapısını MCP araçları olarak sunar.
 
-96 araç, 13 modülde gruplanmıştır. İngilizce araç adları ve açıklamaları
+100 araç, 14 modülde gruplanmıştır. İngilizce araç adları ve açıklamaları
 modelin doğru aracı bulması için tutulmuştur.
 
 ## Gereksinimler
@@ -96,6 +96,20 @@ boşta kalan uçları bildirir; `rollback_on_conflict` ile hatalı çizim geri a
 `.kicad_pro`'ya yazar; genişlik sabit sayı yerine `current_a` ile verilebilir; proje
 KiCad'de kapalıyken çalışır), `get_netclass_config`.
 
+**Güç bütçesi (akım analizi)** — `analyze_power_budget`: şematikten (kicad-cli
+netlist; KiCad açık olmak zorunda değil) her besleme netinin normal ve en kötü
+durum akımını hesaplar; regülatör, sürücü ve seri elemanlar (sigorta, diyot,
+anahtar, bobin, 0 Ω) üzerinden akımı kaynağa kadar taşır, sürücü/regülatör
+sınır aşımlarını uyarır ve `configure_netclasses`'a verilecek netclass önerisi
+üretir. Bilinmeyen parçaları ve ucunda ne olduğu bilinmeyen konnektörleri tahmin
+etmez, soru olarak döndürür. `set_part_current` datasheet değerlerini kaynağıyla
+kaydeder, `list_part_database` bilinen parçaları listeler, `sync_part_database`
+ortak veritabanını indirir.
+
+Parça verisi sırası: kullanıcının kendi kayıtları (`~/.kicad10_mcp/parts.json`)
+→ Supabase'deki onaylı ortak veritabanı (isteğe bağlı, çevrimdışı önbellekli) →
+yerleşik tahminler (`verified: false` olarak işaretlenir).
+
 **Görünüm** — `snapshot_board`: kartın üstten PNG görüntüsü (kart sınırı,
 courtyard'lar, pad'ler, track/via'lar, airwire'lar, vurgulanan net). Model
 yerleşimi ve routing'i görerek kontrol edebilir.
@@ -146,6 +160,30 @@ result = [c.id.value for c in created]
 
 - `KICAD_API_TIMEOUT_MS` — IPC istek zaman aşımı (varsayılan 10000)
 - `KICAD_API_SOCKET` / `KICAD_API_TOKEN` — KiCad otomatik ayarlar; genelde gerekmez
+- `KICAD10_MCP_SHARED_DB=0` — ortak parça veritabanını tamamen kapatır (varsayılan: açık).
+- `KICAD10_MCP_SUPABASE_URL` / `KICAD10_MCP_SUPABASE_KEY` — kendi Supabase projeni
+  kullanmak için. Anahtar **publishable** key olmalı; secret key reddedilir.
+
+## Ortak parça veritabanı (Supabase)
+
+Varsayılan olarak projenin herkese açık veritabanı kullanılır
+(`https://sltliqcuuczmphthlibh.supabase.co`, Frankfurt). Koddaki publishable key
+herkese açık olacak şekilde tasarlanmıştır: `anon` rolüne karşılık gelir ve bu rol
+yalnızca onaylı parçaları okuyup öneri gönderebilir. Veri günde bir önbelleğe
+indirilir (`~/.kicad10_mcp/shared_parts.json`); internet yoksa önbellek kullanılır.
+
+Şema: [`supabase/parts_schema.sql`](supabase/parts_schema.sql).
+
+- `parts`: onaylı kayıtlar. Herkes okuyabilir; Data API üzerinden kimse yazamaz.
+- `part_submissions`: `set_part_current(..., share=True)` ile gelen öneriler.
+  Sadece eklenebilir; API üzerinden okunamaz, değiştirilemez.
+- Onay: proje sahibi SQL ile `select private.approve_submission('<id>');`
+  (fonksiyon dışarıya açık olmayan `private` şemasındadır).
+
+Her tabloda RLS açıktır ve Data API erişimi açık `GRANT`'larla verilir; `anon`
+yalnızca `parts` üzerinde SELECT, `part_submissions` üzerinde INSERT yetkisine
+sahiptir (canlı projede dışarıdan test edildi). Supabase güvenlik denetimi (advisors)
+bulgu vermez.
 
 ## Proje yapısı
 
@@ -162,6 +200,12 @@ kicad10_mcp/
   routing_tools.py   pad bazlı routing + clearance / bağlantı kontrolü
   view_tools.py      snapshot_board (PNG görüntü)
   netclass_tools.py  IPC-2221 hesabı + .kicad_pro netclass/atama düzenleme
+  power_tools.py     güç bütçesi analizi (netlist → net akımları → netclass önerisi)
+  parts_db.py        parça akım veritabanı (yerleşik + kullanıcı + ortak)
+  shared_db.py       Supabase istemcisi (önbellek, öneri gönderme)
+  sexpr.py           KiCad S-expression okuyucu/yazıcı
+supabase/
+  parts_schema.sql   ortak veritabanı şeması + RLS
   create_tools.py    routing + grafik + metin oluşturma
   net_layer_tools.py ağlar, ağ sınıfları, katmanlar, stackup, tasarım kuralları
   project_tools.py   metin değişkenleri, başlık bloğu
