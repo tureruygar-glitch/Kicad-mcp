@@ -23,10 +23,13 @@ from kicad10_mcp import (  # noqa: E402
     exec_tools,
     export_tools,
     net_layer_tools,
+    placement_tools,
     project_tools,
     read_tools,
+    routing_tools,
     schematic_tools,
     system_tools,
+    view_tools,
 )
 
 INSTRUCTIONS = """\
@@ -41,6 +44,11 @@ Conventions:
   schematic; open the relevant document first.
 - Board edits are grouped into single undo steps. Call save_board to persist to
   disk; export tools save automatically unless told otherwise.
+- Placement: prefer place_near_pad / place_relative / place_on_edge / arrange_row
+  over raw coordinates, then check_placement and snapshot_board to see the result.
+- Routing: prefer route_pads (connect pads by name) and add_track_path over
+  add_track. Widths and via sizes default to the net's netclass. Read the
+  "warnings" in every result and fix shorts/clearance problems before moving on.
 - For anything not covered by a dedicated tool, use execute_kipy to run arbitrary
   kipy Python against the live document (the full-control escape hatch).
 """
@@ -51,11 +59,14 @@ for module in (
     system_tools,
     read_tools,
     edit_tools,
+    placement_tools,
     create_tools,
+    routing_tools,
     net_layer_tools,
     project_tools,
     schematic_tools,
     export_tools,
+    view_tools,
     exec_tools,
 ):
     module.register(mcp)

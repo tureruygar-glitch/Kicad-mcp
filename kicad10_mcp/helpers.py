@@ -81,15 +81,26 @@ def all_layer_names() -> list[str]:
 # ---------------------------------------------------------------------------
 
 def find_net(board, name: str):
-    """Look up an existing net by name; fall back to a fresh Net with that name."""
-    from kipy.board_types import Net
+    """Look up an existing net by name, or raise with close-match suggestions.
+
+    Silently creating a new net for an unknown name used to leave tracks on a
+    net nothing else belongs to (e.g. 'GND' vs '/GND'), so unknown names are an
+    error. Returns None for an empty name (no net).
+    """
+    import difflib
 
     if not name:
         return None
-    for net in board.get_nets():
+    nets = list(board.get_nets())
+    for net in nets:
         if net.name == name:
             return net
-    return Net(name=name)
+    names = [n.name for n in nets]
+    # KiCad often prefixes hierarchical nets with '/', so try that before fuzzy matching.
+    alt = [n for n in names if n.lstrip("/") == name.lstrip("/")]
+    close = alt or difflib.get_close_matches(name, names, n=5, cutoff=0.5)
+    hint = f" Did you mean: {', '.join(close)}?" if close else " Call list_nets to see valid names."
+    raise ValueError(f"Net '{name}' does not exist on this board.{hint}")
 
 
 def kiid(value: str) -> KIID:

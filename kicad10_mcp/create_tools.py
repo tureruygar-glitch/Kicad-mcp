@@ -6,6 +6,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from kicad10_mcp.board_query import net_rules
 from kicad10_mcp.connection import commit, require_board
 from kicad10_mcp.helpers import find_net, item_id, mm_to_nm, name_to_layer, vmm
 from kipy.geometry import PolygonWithHoles, PolyLineNode, Vector2
@@ -35,31 +36,31 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     def add_track(start_x_mm: float, start_y_mm: float, end_x_mm: float,
-                  end_y_mm: float, width_mm: float, layer: str = "F.Cu",
+                  end_y_mm: float, width_mm: float | None = None, layer: str = "F.Cu",
                   net_name: str = "") -> dict[str, Any]:
-        """Add a straight copper track segment.
+        """Add a straight copper track segment. Prefer route_pads (connect pads by name)
+        or add_track_path (multi-segment) - they avoid hand-copied coordinates.
 
         Args:
             start_x_mm, start_y_mm: Start point in mm.
             end_x_mm, end_y_mm: End point in mm.
-            width_mm: Track width in mm.
+            width_mm: Track width in mm; default is the net's netclass width.
             layer: Copper layer name, e.g. 'F.Cu' or 'B.Cu'.
-            net_name: Optional net to assign (matched by name).
+            net_name: Net to assign (must exist on the board).
         """
-        from kipy.board_types import Track
+        from kicad10_mcp.routing_tools import Snapshot, _check, create_path, dangling_ends
 
         board = require_board()
-        t = Track()
-        t.start = vmm(start_x_mm, start_y_mm)
-        t.end = vmm(end_x_mm, end_y_mm)
-        t.width = mm_to_nm(width_mm)
-        t.layer = name_to_layer(layer)
         net = find_net(board, net_name)
-        if net is not None:
-            t.net = net
-        with commit(board, "Add track"):
-            created = board.create_items(t)
-        return {"created_ids": [item_id(c) for c in created]}
+        rules = net_rules(board, net)
+        width = width_mm if width_mm is not None else rules.track_width_mm
+        pts = [(start_x_mm, start_y_mm), (end_x_mm, end_y_mm)]
+        created = create_path(board, pts, width, layer, net, "Add track")
+        snap = Snapshot(board)
+        warnings = _check(snap, [(pts, layer)], width, net_name, rules.clearance_mm, created)
+        warnings += dangling_ends(snap, pts, layer, net_name, {item_id(c) for c in created})
+        return {"created_ids": [item_id(c) for c in created], "width_mm": width,
+                "warnings": warnings}
 
     @mcp.tool()
     def add_arc_track(start_x_mm: float, start_y_mm: float, mid_x_mm: float,
@@ -93,29 +94,34 @@ def register(mcp: FastMCP) -> None:
         return {"created_ids": [item_id(c) for c in created]}
 
     @mcp.tool()
-    def add_via(x_mm: float, y_mm: float, diameter_mm: float, drill_mm: float,
-                net_name: str = "") -> dict[str, Any]:
-        """Add a through via at a position.
+    def add_via(x_mm: float, y_mm: float, diameter_mm: float | None = None,
+                drill_mm: float | None = None, net_name: str = "") -> dict[str, Any]:
+        """Add a through via at a position, sized from the net's netclass by default,
+        and report clearance problems with other nets on the outer layers.
 
         Args:
             x_mm, y_mm: Via centre in mm.
-            diameter_mm: Copper pad diameter in mm.
-            drill_mm: Drill hole diameter in mm.
-            net_name: Optional net to assign.
+            diameter_mm: Copper diameter in mm; default from netclass.
+            drill_mm: Drill diameter in mm; default from netclass.
+            net_name: Net to assign (must exist on the board).
         """
-        from kipy.board_types import Via
+        from kicad10_mcp.routing_tools import Snapshot, clearance_conflicts, create_via
 
         board = require_board()
-        v = Via()
-        v.position = vmm(x_mm, y_mm)
-        v.diameter = mm_to_nm(diameter_mm)
-        v.drill_diameter = mm_to_nm(drill_mm)
         net = find_net(board, net_name)
-        if net is not None:
-            v.net = net
-        with commit(board, "Add via"):
-            created = board.create_items(v)
-        return {"created_ids": [item_id(c) for c in created]}
+        rules = net_rules(board, net)
+        dia = diameter_mm if diameter_mm is not None else rules.via_diameter_mm
+        drill = drill_mm if drill_mm is not None else rules.via_drill_mm
+        if drill >= dia:
+            raise ValueError(f"Drill ({drill} mm) must be smaller than diameter ({dia} mm).")
+        created = create_via(board, (x_mm, y_mm), dia, drill, net, "Add via")
+        snap = Snapshot(board)
+        ids = {item_id(c) for c in created}
+        warnings = [w for layer in ("F.Cu", "B.Cu") for w in clearance_conflicts(
+            snap, [((x_mm, y_mm), (x_mm, y_mm))], dia, layer, net_name,
+            rules.clearance_mm, ids)]
+        return {"created_ids": [item_id(c) for c in created], "diameter_mm": dia,
+                "drill_mm": drill, "warnings": warnings}
 
     @mcp.tool()
     def add_zone(points: list[Any], layers: list[str], net_name: str = "",

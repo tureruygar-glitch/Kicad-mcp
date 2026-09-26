@@ -5,8 +5,10 @@ description = "Full-control MCP server for KiCad 10 via the IPC API (kicad-pytho
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "mcp>=1.10",
+    # mcp 2.x renamed FastMCP to MCPServer; the server is written against 1.x.
+    "mcp>=1.10,<2",
     "kicad-python>=0.7.1",
+    "pillow>=10",
 ]
 
 [project.scripts]

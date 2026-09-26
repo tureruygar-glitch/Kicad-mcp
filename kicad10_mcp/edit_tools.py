@@ -6,16 +6,11 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from kicad10_mcp.board_query import find_footprint as _find_footprint
 from kicad10_mcp.connection import commit, require_board
 from kicad10_mcp.helpers import fp_reference, item_id, kiid, vmm
+from kicad10_mcp.placement_tools import placement_warnings
 from kipy.geometry import Angle
-
-
-def _find_footprint(board, reference: str):
-    for fp in board.get_footprints():
-        if fp_reference(fp) == reference:
-            return fp
-    raise ValueError(f"Footprint '{reference}' not found on the board.")
 
 
 def register(mcp: FastMCP) -> None:
@@ -39,7 +34,9 @@ def register(mcp: FastMCP) -> None:
                 fp.orientation = Angle.from_degrees(float(angle_deg))
             board.update_items([fp])
         suffix = f" @ {angle_deg} deg" if angle_deg is not None else ""
-        return f"Moved {reference} to ({x_mm}, {y_mm}) mm{suffix}."
+        warnings = placement_warnings(board, [reference])
+        note = (" Warnings: " + " ".join(warnings)) if warnings else ""
+        return f"Moved {reference} to ({x_mm}, {y_mm}) mm{suffix}.{note}"
 
     @mcp.tool()
     def rotate_footprint(reference: str, angle_deg: float) -> str:
@@ -115,7 +112,8 @@ def register(mcp: FastMCP) -> None:
         if to_update:
             with commit(board, "Batch move footprints"):
                 board.update_items(to_update)
-        return {"moved": moved, "skipped": skipped}
+        return {"moved": moved, "skipped": skipped,
+                "warnings": placement_warnings(board, moved) if moved else []}
 
     @mcp.tool()
     def set_items_locked(item_ids: list[str], locked: bool) -> dict[str, Any]:
