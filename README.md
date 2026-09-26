@@ -5,7 +5,7 @@ API'sini (`kicad-python` / `kipy`) ve `kicad-cli`'yi sararak PCB editörü,
 şematik editörü, proje ayarları, ağlar (nets), katmanlar, tasarım verisi,
 üretim çıktıları ve ham bir betik çalıştırma kapısını MCP araçları olarak sunar.
 
-93 araç, 12 modülde gruplanmıştır. İngilizce araç adları ve açıklamaları
+96 araç, 13 modülde gruplanmıştır. İngilizce araç adları ve açıklamaları
 modelin doğru aracı bulması için tutulmuştur.
 
 ## Gereksinimler
@@ -91,6 +91,11 @@ netclass'tan, 45°/90° yol, gerekirse via), `add_track_path` (çok parçalı yo
 `check_clearance`. Her sonuçta `warnings` alanı kısa devre, clearance ihlali ve
 boşta kalan uçları bildirir; `rollback_on_conflict` ile hatalı çizim geri alınır.
 
+**Netclass / track genişliği** — `calc_track_width` (akıma göre IPC-2221 genişliği,
+ istenirse direnç ve gerilim düşümü), `configure_netclasses` (sınıfları ve net atamalarını
+`.kicad_pro`'ya yazar; genişlik sabit sayı yerine `current_a` ile verilebilir; proje
+KiCad'de kapalıyken çalışır), `get_netclass_config`.
+
 **Görünüm** — `snapshot_board`: kartın üstten PNG görüntüsü (kart sınırı,
 courtyard'lar, pad'ler, track/via'lar, airwire'lar, vurgulanan net). Model
 yerleşimi ve routing'i görerek kontrol edebilir.
@@ -156,6 +161,7 @@ kicad10_mcp/
   placement_tools.py parça/pad/kenar bazlı yerleşim + yerleşim kontrolü
   routing_tools.py   pad bazlı routing + clearance / bağlantı kontrolü
   view_tools.py      snapshot_board (PNG görüntü)
+  netclass_tools.py  IPC-2221 hesabı + .kicad_pro netclass/atama düzenleme
   create_tools.py    routing + grafik + metin oluşturma
   net_layer_tools.py ağlar, ağ sınıfları, katmanlar, stackup, tasarım kuralları
   project_tools.py   metin değişkenleri, başlık bloğu

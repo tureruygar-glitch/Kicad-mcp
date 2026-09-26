@@ -23,6 +23,7 @@ from kicad10_mcp import (  # noqa: E402
     exec_tools,
     export_tools,
     net_layer_tools,
+    netclass_tools,
     placement_tools,
     project_tools,
     read_tools,
@@ -49,6 +50,9 @@ Conventions:
 - Routing: prefer route_pads (connect pads by name) and add_track_path over
   add_track. Widths and via sizes default to the net's netclass. Read the
   "warnings" in every result and fix shorts/clearance problems before moving on.
+- Track sizing: calc_track_width gives the IPC-2221 width for a current.
+  configure_netclasses writes classes (width from current_a) and net
+  assignments to the .kicad_pro; the project must be closed in KiCad first.
 - For anything not covered by a dedicated tool, use execute_kipy to run arbitrary
   kipy Python against the live document (the full-control escape hatch).
 """
@@ -63,6 +67,7 @@ for module in (
     create_tools,
     routing_tools,
     net_layer_tools,
+    netclass_tools,
     project_tools,
     schematic_tools,
     export_tools,
