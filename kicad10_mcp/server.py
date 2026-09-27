@@ -18,6 +18,7 @@ if _pkg_parent not in sys.path:
 from mcp.server.fastmcp import FastMCP  # noqa: E402
 
 from kicad10_mcp import (  # noqa: E402
+    autoroute_tools,
     create_tools,
     edit_tools,
     exec_tools,
@@ -54,6 +55,9 @@ Conventions:
 - Track sizing: calc_track_width gives the IPC-2221 width for a current.
   configure_netclasses writes classes (width from current_a) and net
   assignments to the .kicad_pro; the project must be closed in KiCad first.
+- Autorouting: route high-current nets yourself (or pour them), then call
+  autoroute with those net classes in skip_netclasses; existing tracks stay
+  locked. Check freerouting_status first and read drc_after in the result.
 - For anything not covered by a dedicated tool, use execute_kipy to run arbitrary
   kipy Python against the live document (the full-control escape hatch).
 """
@@ -67,6 +71,7 @@ for module in (
     placement_tools,
     create_tools,
     routing_tools,
+    autoroute_tools,
     net_layer_tools,
     netclass_tools,
     power_tools,

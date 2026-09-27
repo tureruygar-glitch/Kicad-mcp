@@ -5,7 +5,7 @@ API'sini (`kicad-python` / `kipy`) ve `kicad-cli`'yi sararak PCB editörü,
 şematik editörü, proje ayarları, ağlar (nets), katmanlar, tasarım verisi,
 üretim çıktıları ve ham bir betik çalıştırma kapısını MCP araçları olarak sunar.
 
-100 araç, 14 modülde gruplanmıştır. İngilizce araç adları ve açıklamaları
+103 araç, 15 modülde gruplanmıştır. İngilizce araç adları ve açıklamaları
 modelin doğru aracı bulması için tutulmuştur.
 
 ## Gereksinimler
@@ -95,6 +95,20 @@ boşta kalan uçları bildirir; `rollback_on_conflict` ile hatalı çizim geri a
  istenirse direnç ve gerilim düşümü), `configure_netclasses` (sınıfları ve net atamalarını
 `.kicad_pro`'ya yazar; genişlik sabit sayı yerine `current_a` ile verilebilir; proje
 KiCad'de kapalıyken çalışır), `get_netclass_config`.
+
+**Otomatik routing (Freerouting)** — `autoroute`: kalan bağlantıları
+[Freerouting](https://github.com/freerouting/freerouting) ile çizer. Mevcut yollar
+kilitlenir (elle/Claude'un çizdiği güç yolları yerinde kalır), `skip_netclasses`
+ile istenen sınıflar (ör. `HighCurrent`) hiç rotalanmaz. Açık kart kaydedilir,
+`<kart>.pre-autoroute.kicad_pcb` yedeği alınır, rotalanıp KiCad'e yeniden
+yüklenir; ardından zone'lar doldurulup DRC çalıştırılır (`drc_after`).
+`freerouting_status` hazırlığı kontrol eder, `install_freerouting` resmi jar'ı
+GitHub'dan indirir. Freerouting GPL-3.0'dır ve yalnızca ayrı bir program olarak
+çağrılır; kodu bu pakete dahil değildir. Gereksinim: Java 21+ (Java 25 önerilir:
+Freerouting 2.4 saniyeler içinde biter ve limitlere uyar; Java 21'de 2.1.0 çalışır,
+limitleri yok sayar ve dakikalar sürer). DSN/SES dönüşümü KiCad'in kendi Python'u
+(`pcbnew`) ile yapılır, çünkü `kicad-cli` DSN dışa aktaramaz. Not: bakır
+katmandaki yazılar Freerouting'e engel olarak gitmez; DRC raporunu okuyun.
 
 **Güç bütçesi (akım analizi)** — `analyze_power_budget`: şematikten (kicad-cli
 netlist; KiCad açık olmak zorunda değil) her besleme netinin normal ve en kötü
@@ -204,6 +218,8 @@ kicad10_mcp/
   parts_db.py        parça akım veritabanı (yerleşik + kullanıcı + ortak)
   shared_db.py       Supabase istemcisi (önbellek, öneri gönderme)
   sexpr.py           KiCad S-expression okuyucu/yazıcı
+  autoroute_tools.py Freerouting entegrasyonu (DSN → Freerouting → SES)
+  kicad_py/          KiCad'in Python'u ile çalışan yardımcılar (DSN/SES)
 supabase/
   parts_schema.sql   ortak veritabanı şeması + RLS
   create_tools.py    routing + grafik + metin oluşturma
