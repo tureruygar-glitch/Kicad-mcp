@@ -62,9 +62,18 @@ def import_ses(board_path, ses_path, out_path):
     board = pcbnew.LoadBoard(board_path)
     originals = [(t.Duplicate(), _key(t)) for t in _tracks(board)]
     ok = pcbnew.ImportSpecctraSES(board, ses_path)
-    restored = 0
+    restored = widened = 0
+    min_width = board.GetDesignSettings().m_TrackMinWidth
     if ok:
         present = {_key(t) for t in _tracks(board)}
+        original_keys = {key for _clone, key in originals}
+        # Freerouting thins some pin exits to 75 % of the class width, which can
+        # fall below the board's minimum track width (DRC track_width errors).
+        for t in _tracks(board):
+            if t.Type() != pcbnew.PCB_VIA_T and _key(t) not in original_keys \
+                    and 0 < t.GetWidth() < min_width:
+                t.SetWidth(min_width)
+                widened += 1
         for clone, key in originals:
             if key not in present:
                 board.Add(clone)
@@ -73,7 +82,8 @@ def import_ses(board_path, ses_path, out_path):
         pcbnew.SaveBoard(out_path, board)
     vias = sum(1 for t in _tracks(board) if t.Type() == pcbnew.PCB_VIA_T)
     return {"ok": bool(ok), "board": out_path, "tracks": len(_tracks(board)) - vias, "vias": vias,
-            "kept_existing": len(originals), "restored_existing": restored}
+            "kept_existing": len(originals), "restored_existing": restored,
+            "widened_to_min_width": widened, "min_track_width_mm": min_width / 1e6}
 
 
 def strip(board_path, out_path, keep_nets=()):

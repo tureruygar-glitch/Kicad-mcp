@@ -6,7 +6,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from kicad10_mcp.connection import get_kicad, require_board
+from kicad10_mcp.connection import get_kicad, open_documents, require_board
 from kipy.proto.common.types import DocumentType
 
 
@@ -23,15 +23,19 @@ def register(mcp: FastMCP) -> None:
         except RuntimeError as exc:
             return {"connected": False, "error": str(exc)}
         version = kicad.get_version()
-        pcbs = kicad.get_open_documents(DocumentType.DOCTYPE_PCB)
-        schs = kicad.get_open_documents(DocumentType.DOCTYPE_SCHEMATIC)
-        return {
+        pcbs = open_documents(kicad, DocumentType.DOCTYPE_PCB)
+        schs = open_documents(kicad, DocumentType.DOCTYPE_SCHEMATIC)
+        status = {
             "connected": True,
             "version": str(version),
             "api_library_version": str(kicad.get_api_version()),
             "open_pcbs": [d.board_filename for d in pcbs],
             "open_schematic_count": len(schs),
         }
+        if not pcbs:
+            status["note"] = ("No PCB Editor is open: board tools will fail until the "
+                              "board is opened in KiCad.")
+        return status
 
     @mcp.tool()
     def get_version() -> dict[str, str]:
@@ -58,7 +62,7 @@ def register(mcp: FastMCP) -> None:
             ("schematic", DocumentType.DOCTYPE_SCHEMATIC),
             ("project", DocumentType.DOCTYPE_PROJECT),
         ):
-            docs = kicad.get_open_documents(doc_type)
+            docs = open_documents(kicad, doc_type)
             result[label] = [
                 getattr(d, "board_filename", "") or getattr(d, "project", "") or str(d)
                 for d in docs

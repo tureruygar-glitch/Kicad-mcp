@@ -21,7 +21,7 @@ from kicad10_mcp.board_query import (
     pad_layers,
     pad_net_name,
     pad_rect,
-    ratsnest,
+    unrouted_airwires,
 )
 from kicad10_mcp.connection import require_board
 from kicad10_mcp.helpers import _try, fp_reference, layer_to_name, nm_to_mm
@@ -56,17 +56,21 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     def snapshot_board(side: str = "both", show_ratsnest: bool = True,
                        ratsnest_exclude_nets: list[str] | None = None,
-                       highlight_net: str = "", width_px: int = 1200) -> Image:
+                       highlight_net: str = "", width_px: int = 1200,
+                       show_zones: bool = True) -> Image:
         """Return a PNG picture of the open board (top view) to check placement and
-        routing visually. Front copper is red, back copper blue, courtyards are grey
-        (front) / purple (back) boxes labelled with references, airwires are yellow.
+        routing visually. Front copper is red, back copper blue, zone fills are
+        tinted in their layer's colour, courtyards are grey (front) / purple (back)
+        boxes labelled with references, airwires are yellow.
 
         Args:
             side: 'both', 'front', or 'back' - which side's parts and copper to draw.
-            show_ratsnest: Draw airwires (straight lines between pads to be connected).
+            show_ratsnest: Draw airwires for connections that copper (tracks, vias,
+                zone fills) does not make yet.
             ratsnest_exclude_nets: Nets to leave out of the airwires, e.g. ['GND'].
             highlight_net: Draw this net's pads, tracks, and airwires in green.
             width_px: Image width in pixels (height follows the board's aspect ratio).
+            show_zones: Draw copper zone fills (refill_zones first if they are stale).
         """
         from PIL import Image as PILImage, ImageDraw
         from kipy.board_types import ArcTrack
@@ -86,7 +90,10 @@ def register(mcp: FastMCP) -> None:
                     "both": lambda l: True}[side]
 
         courtyards = {fp_reference(fp): footprint_courtyard(board, fp) for fp in fps}
-        bounds = board_outline(board) or merge_rects(courtyards.values())
+        # Frame the outline AND every part: right after "Update PCB from Schematic"
+        # all parts sit beside the board and would otherwise be cropped away.
+        outline = board_outline(board)
+        bounds = merge_rects([r for r in (outline, *courtyards.values()) if r is not None])
         if bounds is None:
             raise RuntimeError("The board is empty; nothing to draw.")
         margin = 2.0
@@ -128,6 +135,31 @@ def register(mcp: FastMCP) -> None:
             elif start and end:
                 pts = [start, mid, end] if mid else [start, end]
                 draw.line([P(p) for p in pts], fill=_OUTLINE, width=2)
+
+        # Zone fills, back first; translucent so the other side still shows through.
+        if show_zones:
+            fills: dict[str, list] = {"B.Cu": [], "F.Cu": []}
+            for z in _try(lambda: list(board.get_zones()), []) or []:
+                if _try(lambda z=z: z.is_rule_area(), True):
+                    continue
+                for layer, polys in (_try(lambda z=z: z.filled_polygons, {}) or {}).items():
+                    name = layer_to_name(layer)
+                    if name in fills and layer_ok(name):
+                        fills[name] += polys
+            for name, color in (("B.Cu", _BACK), ("F.Cu", _FRONT)):
+                if not fills[name]:
+                    continue
+                mask = PILImage.new("L", img.size, 0)
+                mdraw = ImageDraw.Draw(mask)
+                for poly in fills[name]:
+                    pts = [P(_xy(n.point)) for n in poly.outline if n.has_point]
+                    if len(pts) > 2:
+                        mdraw.polygon(pts, fill=70)
+                    for hole in poly.holes:
+                        hpts = [P(_xy(n.point)) for n in hole if n.has_point]
+                        if len(hpts) > 2:
+                            mdraw.polygon(hpts, fill=0)
+                img.paste(color, mask=mask)
 
         # Courtyards and labels.
         font = _font(max(10, int(scale * 1.0)))
@@ -172,7 +204,7 @@ def register(mcp: FastMCP) -> None:
 
         # Airwires.
         if show_ratsnest:
-            for wire in ratsnest(board, ratsnest_exclude_nets or []):
+            for wire in unrouted_airwires(board, ratsnest_exclude_nets or []):
                 color = _HIGHLIGHT if wire["net"] == highlight_net else _AIRWIRE
                 draw.line([P(wire["start"]), P(wire["end"])], fill=color, width=1)
 

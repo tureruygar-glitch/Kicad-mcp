@@ -90,11 +90,16 @@ toplam airwire uzunluğu). `move_footprint` / `batch_move_footprints` da artık
 netclass'tan, 45°/90° yol, gerekirse via), `add_track_path` (çok parçalı yol),
 `check_clearance`. Her sonuçta `warnings` alanı kısa devre, clearance ihlali ve
 boşta kalan uçları bildirir; `rollback_on_conflict` ile hatalı çizim geri alınır.
+`route_pads` geniş bir güç yolunu ince aralıklı bir pine (ör. SSOP) girerken
+komşu pinlere değmeyecek genişliğe daraltır (`necks`), yol tam genişliğe hiç
+sığmıyorsa tamamını sığan en geniş değerle çizer; sürücülerin çift pinli
+çıkışlarında (TB6612 AO1 = 1+2) izi iki pinin ortasına getirip ikisini birden bağlar.
 
 **Netclass / track genişliği** — `calc_track_width` (akıma göre IPC-2221 genişliği,
  istenirse direnç ve gerilim düşümü), `configure_netclasses` (sınıfları ve net atamalarını
 `.kicad_pro`'ya yazar; genişlik sabit sayı yerine `current_a` ile verilebilir; proje
-KiCad'de kapalıyken çalışır), `get_netclass_config`.
+KiCad'de kapalıyken çalışır — sadece proje yöneticisinde açık olsa bile kilit
+dosyasından anlayıp reddeder), `get_netclass_config`.
 
 **Otomatik routing (Freerouting)** — `autoroute`: kalan bağlantıları
 [Freerouting](https://github.com/freerouting/freerouting) ile çizer. Mevcut yollar
@@ -102,6 +107,9 @@ kilitlenir (elle/Claude'un çizdiği güç yolları yerinde kalır), `skip_netcl
 ile istenen sınıflar (ör. `HighCurrent`) hiç rotalanmaz. Açık kart kaydedilir,
 `<kart>.pre-autoroute.kicad_pcb` yedeği alınır, rotalanıp KiCad'e yeniden
 yüklenir; ardından zone'lar doldurulup DRC çalıştırılır (`drc_after`).
+Freerouting'in pin çıkışlarında sınıf genişliğinin %75'ine inceltip kartın asgari
+iz genişliğinin altına düşürdüğü izler içe aktarımda asgari genişliğe çıkarılır
+(`widened_to_min_width`).
 `freerouting_status` hazırlığı kontrol eder, `install_freerouting` resmi jar'ı
 GitHub'dan indirir. Freerouting GPL-3.0'dır ve yalnızca ayrı bir program olarak
 çağrılır; kodu bu pakete dahil değildir. Gereksinim: Java 21+ (Java 25 önerilir:
@@ -125,8 +133,10 @@ alınmıştır (her kayıtta kaynak URL ve sayfa); datasheet'i alınamayan MCP17
 L7805 ve WS2812B `verified: false` olarak işaretlidir.
 
 **Görünüm** — `snapshot_board`: kartın üstten PNG görüntüsü (kart sınırı,
-courtyard'lar, pad'ler, track/via'lar, airwire'lar, vurgulanan net). Model
-yerleşimi ve routing'i görerek kontrol edebilir.
+courtyard'lar, pad'ler, track/via'lar, zone dolguları, vurgulanan net). Kart
+dışındaki parçalar da kadraja girer; airwire'lar KiCad'in bağlantı bilgisiyle
+yalnızca bakırın henüz bağlamadığı bağlantılar için çizilir. Model yerleşimi ve
+routing'i görerek kontrol edebilir.
 
 **Oluşturma (routing/grafik)** — `add_track`, `add_arc_track`, `add_via`,
 `add_zone`, `add_zone_rect`, `refill_zones`, `add_line`, `add_rectangle`,
@@ -151,6 +161,8 @@ açıklayıcı bir hata döndürebilir — bu durumda `execute_kipy` kullanın.)
 **Üretim çıktıları (kicad-cli)** — `run_kicad_cli`, `export_gerbers`,
 `export_drill`, `export_step`, `export_pdf`, `export_svg`, `export_pos`,
 `render_3d`, `run_drc`, `export_bom`, `export_netlist`, `run_erc`
+(`run_drc` önce zone'ları doldurur — eski dolgu sahte clearance hatası verir — ve
+ihlalleri türe göre sayıp örnekleriyle özetler.)
 
 **Tam kontrol kapısı** — `execute_kipy`: canlı KiCad'e karşı rastgele Python
 çalıştırır. `kicad`, `board`, `schematic`, `kipy`, `commit`, `Vector2`, `Angle`,
@@ -173,6 +185,10 @@ result = [c.id.value for c in created]
 ## Ortam değişkenleri
 
 - `KICAD_API_TIMEOUT_MS` — IPC istek zaman aşımı (varsayılan 10000)
+- `KICAD_API_BUSY_WAIT_S` — KiCad "meşgul" dediğinde (ör. otomatik kayıt sırasında)
+  isteği yeniden deneme süresi (varsayılan 5); açık diyalog/aktif araç gibi kalıcı
+  durumlarda sonra anlaşılır bir hata döner. KiCad yeniden başlarsa bağlantı
+  kendiliğinden yenilenir.
 - `KICAD_API_SOCKET` / `KICAD_API_TOKEN` — KiCad otomatik ayarlar; genelde gerekmez
 - `KICAD10_MCP_JAVA` — Freerouting için kullanılacak `java` (varsayılan: bulunan en yeni sürüm)
 - `KICAD10_MCP_FREEROUTING_JAR` — belirli bir Freerouting jar dosyası

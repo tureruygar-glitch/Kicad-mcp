@@ -57,7 +57,7 @@ def register(mcp: FastMCP) -> None:
         pts = [(start_x_mm, start_y_mm), (end_x_mm, end_y_mm)]
         created = create_path(board, pts, width, layer, net, "Add track")
         snap = Snapshot(board)
-        warnings = _check(snap, [(pts, layer)], width, net_name, rules.clearance_mm, created)
+        warnings = _check(snap, [(pts, layer, width)], net_name, rules.clearance_mm, created)
         warnings += dangling_ends(snap, pts, layer, net_name, {item_id(c) for c in created})
         return {"created_ids": [item_id(c) for c in created], "width_mm": width,
                 "warnings": warnings}

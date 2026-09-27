@@ -114,10 +114,21 @@ def _open_in_kicad(pro: Path) -> Optional[str]:
             continue
         for d in docs:
             proj_path = getattr(getattr(d, "project", None), "path", "") or ""
-            if proj_path and Path(proj_path).resolve() == pro.parent.resolve():
-                return label
-            if not proj_path:
+            if proj_path:
+                if Path(proj_path).resolve() == pro.parent.resolve():
+                    return label
+                continue
+            # Schematic specifiers carry only the root sheet's file name.
+            filename = getattr(d, "board_filename", "") or ""
+            if not filename or Path(filename).stem == pro.stem:
                 return label  # can't tell which project; be safe
+    # The project manager holds the settings in memory too but doesn't answer
+    # GetOpenDocuments; its lock file is the only sign (KiCad is running, so
+    # the lock isn't a leftover from a crash - unless another project is open).
+    lock = pro.with_name(f"~{pro.name}.lck")
+    if lock.exists():
+        return (f"project manager (lock file {lock.name}; if KiCad really has another "
+                "project open, it is stale from a crash and can be deleted)")
     return None
 
 

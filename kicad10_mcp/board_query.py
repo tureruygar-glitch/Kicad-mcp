@@ -262,21 +262,77 @@ def segment_rect_distance(a: Point, b: Point, r: Rect) -> float:
 # Ratsnest
 # ---------------------------------------------------------------------------
 
-def ratsnest(board, exclude_nets: Iterable[str] = ()) -> list[dict[str, Any]]:
-    """Minimum-spanning-tree airwires between pads of each net.
-
-    Ignores existing tracks and zones, so it measures how "tangled" the
-    placement is rather than what is still unrouted.
-    """
+def _pads_by_net(board, exclude_nets: Iterable[str]) -> dict[str, list[tuple[Any, Point, str]]]:
     skip = set(exclude_nets)
-    by_net: dict[str, list[tuple[Point, str]]] = {}
+    by_net: dict[str, list[tuple[Any, Point, str]]] = {}
     for fp in board.get_footprints():
         ref = fp_reference(fp)
         for pad in footprint_pads(fp):
             name = pad_net_name(pad)
             if not name or name in skip or name.startswith("unconnected-"):
                 continue
-            by_net.setdefault(name, []).append((pad_xy(pad), f"{ref}.{pad.number}"))
+            by_net.setdefault(name, []).append((pad, pad_xy(pad), f"{ref}.{pad.number}"))
+    return by_net
+
+
+def unrouted_airwires(board, exclude_nets: Iterable[str] = ()) -> list[dict[str, Any]]:
+    """Airwires for the connections that copper does NOT make yet.
+
+    Pads already joined by tracks, vias, or zone fills (KiCad's own connectivity,
+    GetConnectedItems - KiCad 10.0.1+) count as one node; the shortest wires
+    between the remaining groups are returned. Falls back to plain ratsnest if
+    KiCad can't report connectivity.
+    """
+    from kipy.proto.common.types import KiCadObjectType
+
+    wires: list[dict[str, Any]] = []
+    for net, nodes in _pads_by_net(board, exclude_nets).items():
+        n = len(nodes)
+        if n < 2:
+            continue
+        parent = list(range(n))
+
+        def find(i: int) -> int:
+            while parent[i] != i:
+                parent[i] = parent[parent[i]]
+                i = parent[i]
+            return i
+
+        index = {nodes[i][0].id.value: i for i in range(n)}
+        grouped: set[int] = set()
+        for i in range(n):
+            if i in grouped:
+                continue
+            try:
+                joined = board.get_connected_items(nodes[i][0], types=[KiCadObjectType.KOT_PCB_PAD])
+            except Exception:  # noqa: BLE001 - older KiCad: treat every pad as its own node
+                joined = []
+            for item in joined:
+                j = index.get(item.id.value)
+                if j is not None:
+                    parent[find(j)] = find(i)
+                    grouped.add(j)
+        # Kruskal over pad pairs; pads in one copper group are already merged.
+        pairs = sorted((math.dist(nodes[a][1], nodes[b][1]), a, b)
+                       for a in range(n) for b in range(a + 1, n))
+        for d, a, b in pairs:
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent[rb] = ra
+                wires.append({"net": net, "from": nodes[a][2], "to": nodes[b][2],
+                              "start": nodes[a][1], "end": nodes[b][1],
+                              "length_mm": round(d, 3)})
+    return wires
+
+
+def ratsnest(board, exclude_nets: Iterable[str] = ()) -> list[dict[str, Any]]:
+    """Minimum-spanning-tree airwires between pads of each net.
+
+    Ignores existing tracks and zones, so it measures how "tangled" the
+    placement is rather than what is still unrouted (see unrouted_airwires).
+    """
+    by_net = {net: [(xy, label) for _pad, xy, label in nodes]
+              for net, nodes in _pads_by_net(board, exclude_nets).items()}
 
     wires: list[dict[str, Any]] = []
     for net, nodes in by_net.items():

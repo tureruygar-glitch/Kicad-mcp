@@ -47,7 +47,8 @@ def _kicad_cli() -> str:
 def _run(args: list[str]) -> dict[str, Any]:
     cli = _kicad_cli()
     proc = subprocess.run(
-        [cli, *args], capture_output=True, text=True, timeout=_CLI_TIMEOUT
+        [cli, *args], capture_output=True, text=True, timeout=_CLI_TIMEOUT,
+        encoding="utf-8", errors="replace",  # kicad-cli writes UTF-8, not the ANSI codepage
     )
     return {
         "command": " ".join([os.path.basename(cli), *args]),
@@ -58,11 +59,24 @@ def _run(args: list[str]) -> dict[str, Any]:
     }
 
 
+def board_file(board) -> str:
+    """Absolute path of the open board's file.
+
+    ``board.name`` is only the file name (e.g. 'x.kicad_pcb'); kicad-cli run from
+    the server's working directory would not find it, so join the project folder.
+    """
+    name = board.name
+    if not name or os.path.isabs(name):
+        return name
+    project_dir = getattr(getattr(board.document, "project", None), "path", "") or ""
+    return os.path.join(project_dir, name) if project_dir else os.path.abspath(name)
+
+
 def _pcb_path(save_first: bool) -> str:
     board = require_board()
     if save_first:
         board.save()
-    path = board.name
+    path = board_file(board)
     if not path:
         raise RuntimeError(
             "The open board has no file path yet. Save it once in KiCad first."
@@ -80,7 +94,7 @@ def _sch_path(save_first: bool, override: str = "") -> str:
             sch.save()
     except Exception:  # noqa: BLE001 - no schematic open; derive from the PCB
         pass
-    pcb = require_board().name
+    pcb = board_file(require_board())
     if pcb:
         base, _ = os.path.splitext(pcb)
         candidate = base + ".kicad_sch"
@@ -204,16 +218,25 @@ def register(mcp: FastMCP) -> None:
                      "--side", side, "-w", str(width), "-r", str(height)])
 
     @mcp.tool()
-    def run_drc(output_path: str = "", save_first: bool = True) -> dict[str, Any]:
+    def run_drc(output_path: str = "", save_first: bool = True,
+                refill_zones: bool = True) -> dict[str, Any]:
         """Run Design Rule Check on the open PCB and summarise the results.
 
         Args:
             output_path: Optional .json report path (a temp file is used if empty).
             save_first: Save the board before checking.
+            refill_zones: Refill zones first (in the editor too when saving) - stale
+                fills after routing show up as false clearance errors.
         """
+        if refill_zones and save_first:
+            try:
+                require_board().refill_zones()
+            except Exception:  # noqa: BLE001 - kicad-cli still refills its own copy
+                pass
         report = output_path or os.path.join(tempfile.gettempdir(), "kicad_drc_report.json")
         result = _run(["pcb", "drc", _pcb_path(save_first), "-o", report,
-                       "--format", "json", "--severity-all"])
+                       "--format", "json", "--severity-all",
+                       *(["--refill-zones"] if refill_zones else [])])
         result["report_path"] = report
         result.update(_summarize_report(report))
         return result
@@ -265,17 +288,32 @@ def register(mcp: FastMCP) -> None:
 
 
 def _summarize_report(path: str) -> dict[str, Any]:
-    """Parse a kicad-cli DRC/ERC JSON report into severity counts."""
+    """Parse a kicad-cli DRC/ERC JSON report: counts by severity and type, plus
+    the first few problems spelled out (errors first)."""
     try:
         with open(path, "r", encoding="utf-8") as fh:
             data = json.load(fh)
     except Exception as exc:  # noqa: BLE001
         return {"summary_error": f"Could not parse report: {exc}"}
+    violations = list(data.get("violations") or [])
+    for sheet in data.get("sheets") or []:  # ERC reports group violations by sheet
+        violations += sheet.get("violations") or []
+    unconnected = list(data.get("unconnected_items") or [])
+    parity = list(data.get("schematic_parity") or [])
     counts: dict[str, int] = {}
-    total = 0
-    for key in ("violations", "unconnected_items", "schematic_parity"):
-        for entry in data.get(key, []) or []:
-            total += 1
-            sev = str(entry.get("severity", "unknown"))
-            counts[sev] = counts.get(sev, 0) + 1
-    return {"total_issues": total, "issues_by_severity": counts}
+    by_type: dict[str, int] = {}
+    for entry in violations + unconnected + parity:
+        sev = str(entry.get("severity", "unknown"))
+        counts[sev] = counts.get(sev, 0) + 1
+    for v in violations:
+        by_type[v.get("type", "?")] = by_type.get(v.get("type", "?"), 0) + 1
+
+    def describe(v: dict[str, Any]) -> str:
+        items = " / ".join(i.get("description", "") for i in v.get("items") or [])
+        return f"{v.get('type', '?')} ({v.get('severity', '?')}): {items}"
+
+    ordered = sorted(violations, key=lambda v: v.get("severity") != "error")
+    return {"total_issues": len(violations) + len(unconnected) + len(parity),
+            "issues_by_severity": counts, "violations_by_type": by_type,
+            "unconnected": len(unconnected), "schematic_parity": len(parity),
+            "examples": [describe(v) for v in ordered[:8]]}

@@ -161,7 +161,8 @@ def _run_kicad_py(*args: str, timeout: int = 300) -> dict[str, Any]:
     return res
 
 
-def _write_settings(user_dir: Path, max_passes: int, timeout_s: int) -> None:
+def _write_settings(user_dir: Path, max_passes: int, timeout_s: int,
+                    version: str = "") -> None:
     """Headless, no telemetry. (Freerouting 2.1.0 ignores the pass/time limits in
     CLI mode; 2.2+ honours them.)"""
     user_dir.mkdir(parents=True, exist_ok=True)
@@ -170,6 +171,8 @@ def _write_settings(user_dir: Path, max_passes: int, timeout_s: int) -> None:
     import uuid
 
     settings = {
+        # Without it 2.4 treats the file as a "very old config" and warns.
+        **({"version": version} if version else {}),
         # 2.4+ requires a profile id; a fresh random one per run is not trackable.
         "profile": {"id": str(uuid.uuid4()), "email": "", "allow_telemetry": False,
                     "allow_contact": False},
@@ -194,7 +197,8 @@ def run_freerouting(dsn: Path, ses: Path, *, max_passes: int = 20, timeout_s: in
     if jar is None:
         raise RuntimeError("Freerouting is not installed; call install_freerouting first.")
     work = dsn.parent
-    _write_settings(work / "freerouting_user", max_passes, timeout_s)
+    _write_settings(work / "freerouting_user", max_passes, timeout_s,
+                    ".".join(map(str, _jar_version(jar))))
     cmd = [info["java"], "-jar", str(jar), "-de", str(dsn), "-do", str(ses),
            "-mp", str(max_passes), "--gui.enabled=false", "-da",
            f"--user_data_path={work / 'freerouting_user'}"]
@@ -255,9 +259,12 @@ def autoroute_file(board_file: Path, out_file: Path, *, max_passes: int = 20,
                              skip_netclasses=skip_netclasses)
         imp = _run_kicad_py("import", str(board_file), str(ses), str(out_file))
     after = _drc_summary(out_file)
+    fr["note"] = ("Freerouting's own unrouted/violation counts include connections of "
+                  "skipped net classes and pours; drc_after is authoritative.")
     return {"freerouting": fr, "existing_tracks_locked": exp.get("locked_for_export", 0),
             "existing_items_kept": imp.get("kept_existing", 0),
             "tracks": imp["tracks"], "vias": imp["vias"],
+            "widened_to_min_width": imp.get("widened_to_min_width", 0),
             "unconnected_before": before.get("unconnected"), "drc_after": after}
 
 
