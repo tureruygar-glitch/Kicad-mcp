@@ -475,7 +475,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     def set_part_current(part: str, entry: dict[str, Any], source: str,
-                         verified: bool = True, share: bool = False) -> dict[str, Any]:
+                         verified: bool = True) -> dict[str, Any]:
         """Save a part's current data (from its datasheet) to the user part database so
         analyze_power_budget can use it. Always cite where the numbers came from.
 
@@ -492,11 +492,7 @@ def register(mcp: FastMCP) -> None:
                 Pin names must match the KiCad symbol's pin names.
             source: Datasheet URL (and page/table) the numbers came from.
             verified: False if the numbers are estimates rather than datasheet values.
-            share: Also propose the entry to the shared Supabase database (reviewed by
-                the maintainer before anyone else sees it). Only when the user agrees.
         """
-        from kicad10_mcp import shared_db
-
         data = dict(entry)
         data.setdefault("match", [part])
         data["source"] = source
@@ -505,30 +501,7 @@ def register(mcp: FastMCP) -> None:
         if problems:
             raise ValueError("Invalid entry: " + " ".join(problems))
         path = parts_db.save_user_entry(part, data)
-        result: dict[str, Any] = {"saved": part, "database": str(path), "entry": data}
-        if share:
-            if not shared_db.configured():
-                result["shared"] = "not submitted: shared database not configured"
-            else:
-                try:
-                    shared_db.submit(part, data)
-                    result["shared"] = "submitted for review"
-                except (RuntimeError, OSError) as exc:
-                    result["shared"] = f"not submitted: {exc}"
-        return result
-
-    @mcp.tool()
-    def sync_part_database(force: bool = True) -> dict[str, Any]:
-        """Download the reviewed shared part database (Supabase) into the local cache.
-        The power budget also refreshes it automatically once a day and works offline
-        from the cache.
-
-        Args:
-            force: Refresh even if the cache is less than a day old.
-        """
-        from kicad10_mcp import shared_db
-
-        return shared_db.sync(force=force)
+        return {"saved": part, "database": str(path), "entry": data}
 
     @mcp.tool()
     def list_part_database(filter: str = "") -> dict[str, Any]:
@@ -539,8 +512,7 @@ def register(mcp: FastMCP) -> None:
         """
         user = parts_db.load_user_db()
         rows = []
-        for origin, db in (("user", user), ("shared", parts_db.load_shared_db()),
-                           ("built-in", parts_db.BUILTIN)):
+        for origin, db in (("user", user), ("built-in", parts_db.BUILTIN)):
             for key, e in db.items():
                 if filter and filter.lower() not in key.lower():
                     continue

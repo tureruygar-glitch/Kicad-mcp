@@ -227,21 +227,9 @@ def save_user_entry(key: str, entry: dict[str, Any]) -> Path:
     return USER_DB
 
 
-def load_shared_db() -> dict[str, dict[str, Any]]:
-    from kicad10_mcp import shared_db
-
-    try:
-        return shared_db.load()
-    except RuntimeError:
-        return {}
-
-
 def lookup(part: str, value: str) -> Optional[tuple[str, dict[str, Any]]]:
-    """Find a database entry for a symbol part name or value.
-
-    Order: the user's own entries, then the reviewed shared database, then built-ins.
-    """
-    for db in (load_user_db(), load_shared_db(), BUILTIN):
+    """Find a database entry for a symbol part name or value (user entries win)."""
+    for db in (load_user_db(), BUILTIN):
         for key, entry in db.items():
             pats = entry.get("match") or [key]
             for cand in (part, value):

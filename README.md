@@ -5,7 +5,7 @@ API'sini (`kicad-python` / `kipy`) ve `kicad-cli`'yi sararak PCB editörü,
 şematik editörü, proje ayarları, ağlar (nets), katmanlar, tasarım verisi,
 üretim çıktıları ve ham bir betik çalıştırma kapısını MCP araçları olarak sunar.
 
-103 araç, 15 modülde gruplanmıştır. İngilizce araç adları ve açıklamaları
+102 araç, 14 modülde gruplanmıştır. İngilizce araç adları ve açıklamaları
 modelin doğru aracı bulması için tutulmuştur.
 
 ## Gereksinimler
@@ -117,12 +117,12 @@ anahtar, bobin, 0 Ω) üzerinden akımı kaynağa kadar taşır, sürücü/regü
 sınır aşımlarını uyarır ve `configure_netclasses`'a verilecek netclass önerisi
 üretir. Bilinmeyen parçaları ve ucunda ne olduğu bilinmeyen konnektörleri tahmin
 etmez, soru olarak döndürür. `set_part_current` datasheet değerlerini kaynağıyla
-kaydeder, `list_part_database` bilinen parçaları listeler, `sync_part_database`
-ortak veritabanını indirir.
+kaydeder, `list_part_database` bilinen parçaları listeler.
 
 Parça verisi sırası: kullanıcının kendi kayıtları (`~/.kicad10_mcp/parts.json`)
-→ Supabase'deki onaylı ortak veritabanı (isteğe bağlı, çevrimdışı önbellekli) →
-yerleşik tahminler (`verified: false` olarak işaretlenir).
+→ yerleşik veritabanı. Yerleşik 16 parçanın 13'ü üretici datasheet'lerinden
+alınmıştır (her kayıtta kaynak URL ve sayfa); datasheet'i alınamayan MCP1700,
+L7805 ve WS2812B `verified: false` olarak işaretlidir.
 
 **Görünüm** — `snapshot_board`: kartın üstten PNG görüntüsü (kart sınırı,
 courtyard'lar, pad'ler, track/via'lar, airwire'lar, vurgulanan net). Model
@@ -174,30 +174,9 @@ result = [c.id.value for c in created]
 
 - `KICAD_API_TIMEOUT_MS` — IPC istek zaman aşımı (varsayılan 10000)
 - `KICAD_API_SOCKET` / `KICAD_API_TOKEN` — KiCad otomatik ayarlar; genelde gerekmez
-- `KICAD10_MCP_SHARED_DB=0` — ortak parça veritabanını tamamen kapatır (varsayılan: açık).
-- `KICAD10_MCP_SUPABASE_URL` / `KICAD10_MCP_SUPABASE_KEY` — kendi Supabase projeni
-  kullanmak için. Anahtar **publishable** key olmalı; secret key reddedilir.
-
-## Ortak parça veritabanı (Supabase)
-
-Varsayılan olarak projenin herkese açık veritabanı kullanılır
-(`https://sltliqcuuczmphthlibh.supabase.co`, Frankfurt). Koddaki publishable key
-herkese açık olacak şekilde tasarlanmıştır: `anon` rolüne karşılık gelir ve bu rol
-yalnızca onaylı parçaları okuyup öneri gönderebilir. Veri günde bir önbelleğe
-indirilir (`~/.kicad10_mcp/shared_parts.json`); internet yoksa önbellek kullanılır.
-
-Şema: [`supabase/parts_schema.sql`](supabase/parts_schema.sql).
-
-- `parts`: onaylı kayıtlar. Herkes okuyabilir; Data API üzerinden kimse yazamaz.
-- `part_submissions`: `set_part_current(..., share=True)` ile gelen öneriler.
-  Sadece eklenebilir; API üzerinden okunamaz, değiştirilemez.
-- Onay: proje sahibi SQL ile `select private.approve_submission('<id>');`
-  (fonksiyon dışarıya açık olmayan `private` şemasındadır).
-
-Her tabloda RLS açıktır ve Data API erişimi açık `GRANT`'larla verilir; `anon`
-yalnızca `parts` üzerinde SELECT, `part_submissions` üzerinde INSERT yetkisine
-sahiptir (canlı projede dışarıdan test edildi). Supabase güvenlik denetimi (advisors)
-bulgu vermez.
+- `KICAD10_MCP_JAVA` — Freerouting için kullanılacak `java` (varsayılan: bulunan en yeni sürüm)
+- `KICAD10_MCP_FREEROUTING_JAR` — belirli bir Freerouting jar dosyası
+- `KICAD10_MCP_KICAD_PYTHON` — KiCad'in Python'u (DSN/SES dönüşümü için; genelde otomatik bulunur)
 
 ## Proje yapısı
 
@@ -215,13 +194,10 @@ kicad10_mcp/
   view_tools.py      snapshot_board (PNG görüntü)
   netclass_tools.py  IPC-2221 hesabı + .kicad_pro netclass/atama düzenleme
   power_tools.py     güç bütçesi analizi (netlist → net akımları → netclass önerisi)
-  parts_db.py        parça akım veritabanı (yerleşik + kullanıcı + ortak)
-  shared_db.py       Supabase istemcisi (önbellek, öneri gönderme)
+  parts_db.py        parça akım veritabanı (yerleşik + kullanıcı)
   sexpr.py           KiCad S-expression okuyucu/yazıcı
   autoroute_tools.py Freerouting entegrasyonu (DSN → Freerouting → SES)
   kicad_py/          KiCad'in Python'u ile çalışan yardımcılar (DSN/SES)
-supabase/
-  parts_schema.sql   ortak veritabanı şeması + RLS
   create_tools.py    routing + grafik + metin oluşturma
   net_layer_tools.py ağlar, ağ sınıfları, katmanlar, stackup, tasarım kuralları
   project_tools.py   metin değişkenleri, başlık bloğu
