@@ -84,7 +84,7 @@ def _java_candidates() -> list[str]:
 
 def _java_version(java: str) -> Optional[int]:
     try:
-        res = subprocess.run([java, "-version"], capture_output=True, text=True, timeout=30)
+        res = subprocess.run([java, "-version"], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=30)
     except (OSError, subprocess.TimeoutExpired):
         return None
     m = re.search(r'version "(\d+)(?:\.(\d+))?', res.stderr + res.stdout)
@@ -148,7 +148,7 @@ def find_jar(java_major: Optional[int]) -> Optional[Path]:
 
 def _run_kicad_py(*args: str, timeout: int = 300) -> dict[str, Any]:
     proc = subprocess.run([str(kicad_python()), str(_SPECCTRA), *args],
-                          capture_output=True, text=True, timeout=timeout,
+                          stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout,
                           encoding="utf-8", errors="replace")
     m = re.search(r"@@KICAD10_MCP_RESULT@@(.*?)@@END@@", proc.stdout, re.S)
     if m is None:
@@ -206,7 +206,7 @@ def run_freerouting(dsn: Path, ses: Path, *, max_passes: int = 20, timeout_s: in
         cmd += ["-inc", ",".join(skip_netclasses)]
     started = time.time()
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s,
+        proc = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout_s,
                               encoding="utf-8", errors="replace")
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"Freerouting did not finish within {timeout_s} s (Freerouting "
@@ -229,7 +229,7 @@ def _drc_summary(board_file: Path) -> dict[str, Any]:
     report = board_file.with_suffix(".drc.json")
     subprocess.run([_kicad_cli(), "pcb", "drc", "--refill-zones", "--format", "json",
                     "--severity-all", "-o", str(report), str(board_file)],
-                   capture_output=True, text=True, timeout=600)
+                   stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=600)
     try:
         data = json.loads(report.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):

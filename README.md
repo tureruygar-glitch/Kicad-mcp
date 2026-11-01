@@ -10,32 +10,22 @@ modelin doğru aracı bulması için tutulmuştur.
 
 ## Gereksinimler
 
-- **KiCad 10** kurulu (bu makinede: `C:\Program Files\KiCad\10.0`, kicad-cli 10.0.5)
-- Python paketleri: `kicad-python>=0.7.1`, `mcp>=1.10,<2`, `pillow>=10`
-
-  ```powershell
-  pip install -e .
-  ```
-
-  > `mcp` 2.x'te `FastMCP` kaldırıldı; sunucu 1.x API'siyle yazıldığı için sürüm `<2`
-  > ile sabitlenmiştir.
+- **KiCad 10** kurulu
+- [**uv**](https://docs.astral.sh/uv/) (Python ve paketleri kendisi hazırlar)
+- `autoroute` için **Java 21+** (Java 25 önerilir); Freerouting'i
+  `install_freerouting` kurar
 - KiCad açık ve **API sunucusu etkin**:
   `Preferences > Plugins > "Enable the KiCad API server"`
 - Çoğu araç **o anda AÇIK olan** kart (`.kicad_pcb`) veya şema (`.kicad_sch`)
   üzerinde çalışır — önce ilgili dökümanı açın.
 
-## Çalıştırma
+## Kurulum
+
+Sunucu KiCad'e yerel IPC ile bağlandığı için bilgisayarda çalışır; Windows'ta
+Docker container'ından açık KiCad'e bağlanamaz. Claude Code'a kaydetmek için:
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\python.exe -m pip install -e .
-.venv\Scripts\python.exe run_server.py      # veya: python -m kicad10_mcp
-```
-
-Sunucu stdio üzerinden konuşur. Claude Code'a kaydetmek için:
-
-```powershell
-claude mcp add kicad --scope user -- <repo>\.venv\Scripts\python.exe <repo>\run_server.py
+claude mcp add kicad --scope user -- uvx --from https://github.com/tureruygar-glitch/Kicad-mcp/archive/refs/heads/main.zip kicad10-mcp
 ```
 
 `claude` komutu yoksa (yalnızca masaüstü uygulaması kuruluysa) aynı kaydı
@@ -45,8 +35,8 @@ claude mcp add kicad --scope user -- <repo>\.venv\Scripts\python.exe <repo>\run_
 "mcpServers": {
   "kicad": {
     "type": "stdio",
-    "command": "<repo>\\.venv\\Scripts\\python.exe",
-    "args": ["<repo>\\run_server.py"]
+    "command": "uvx",
+    "args": ["--from", "https://github.com/tureruygar-glitch/Kicad-mcp/archive/refs/heads/main.zip", "kicad10-mcp"]
   }
 }
 ```
@@ -54,6 +44,17 @@ claude mcp add kicad --scope user -- <repo>\.venv\Scripts\python.exe <repo>\run_
 Kayıttan sonra Claude Code oturumunu yeniden başlatın. Test: `kicad_status`
 aracı "no handler available" derse KiCad'e bağlanılmıştır ama PCB Editor açık
 değildir.
+
+`uv` indirilen sürümü önbellekte tutar. Güncellemek için `uvx` komutunu bir kez
+`--refresh` ile çalıştırın.
+
+Geliştirme için:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -e .
+.venv\Scripts\python.exe run_server.py
+```
 
 ## Birimler / kurallar
 

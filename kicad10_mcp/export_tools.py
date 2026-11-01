@@ -47,7 +47,7 @@ def _kicad_cli() -> str:
 def _run(args: list[str]) -> dict[str, Any]:
     cli = _kicad_cli()
     proc = subprocess.run(
-        [cli, *args], capture_output=True, text=True, timeout=_CLI_TIMEOUT,
+        [cli, *args], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=_CLI_TIMEOUT,
         encoding="utf-8", errors="replace",  # kicad-cli writes UTF-8, not the ANSI codepage
     )
     return {
@@ -215,7 +215,7 @@ def register(mcp: FastMCP) -> None:
             save_first: Save the board before rendering.
         """
         return _run(["pcb", "render", _pcb_path(save_first), "-o", output_path,
-                     "--side", side, "-w", str(width), "-r", str(height)])
+                     "--side", side, "-w", str(width), "--height", str(height)])
 
     @mcp.tool()
     def run_drc(output_path: str = "", save_first: bool = True,

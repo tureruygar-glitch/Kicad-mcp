@@ -105,7 +105,7 @@ def _export_netlist(schematic: Path) -> Path:
 
     out = Path(tempfile.gettempdir()) / f"kicad10_mcp_power_{os.getpid()}.net"
     proc = subprocess.run([_kicad_cli(), "sch", "export", "netlist", "--format", "kicadsexpr",
-                           "-o", str(out), str(schematic)], capture_output=True, text=True,
+                           "-o", str(out), str(schematic)], stdin=subprocess.DEVNULL, capture_output=True, text=True,
                           timeout=300)
     if proc.returncode != 0 or not out.exists():
         raise RuntimeError(f"kicad-cli netlist export failed: {proc.stderr.strip() or proc.stdout}")
