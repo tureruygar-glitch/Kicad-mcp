@@ -45,7 +45,7 @@ Sunucu KiCad'e yerel IPC ile bağlandığı için bilgisayarda çalışır; Wind
 Docker container'ından açık KiCad'e bağlanamaz. Claude Code'a kaydetmek için:
 
 ```powershell
-claude mcp add kicad --scope user -- uvx --from https://github.com/tureruygar-glitch/Kicad-mcp/archive/refs/tags/v1.1.0.zip kicad10-mcp
+claude mcp add kicad --scope user -- uvx --from https://github.com/tureruygar-glitch/Kicad-mcp/archive/refs/tags/v1.1.1.zip kicad10-mcp
 ```
 
 `claude` komutu yoksa (yalnızca masaüstü uygulaması kuruluysa) aynı kaydı
@@ -56,7 +56,7 @@ claude mcp add kicad --scope user -- uvx --from https://github.com/tureruygar-gl
   "kicad": {
     "type": "stdio",
     "command": "uvx",
-    "args": ["--from", "https://github.com/tureruygar-glitch/Kicad-mcp/archive/refs/tags/v1.1.0.zip", "kicad10-mcp"]
+    "args": ["--from", "https://github.com/tureruygar-glitch/Kicad-mcp/archive/refs/tags/v1.1.1.zip", "kicad10-mcp"]
   }
 }
 ```
@@ -65,8 +65,8 @@ Kayıttan sonra Claude Code oturumunu yeniden başlatın. Test: `kicad_status`
 aracı "no handler available" derse KiCad'e bağlanılmıştır ama PCB Editor açık
 değildir.
 
-Komut `v1.1.0` sürümünü kurar. Geliştirme sürümü için adresteki
-`refs/tags/v1.1.0.zip` yerine `refs/heads/main.zip` yazın; `uv` indirdiğini
+Komut `v1.1.1` sürümünü kurar. Geliştirme sürümü için adresteki
+`refs/tags/v1.1.1.zip` yerine `refs/heads/main.zip` yazın; `uv` indirdiğini
 önbellekte tuttuğu için `main`'i güncellerken komutu bir kez `--refresh` ile çalıştırın.
 
 Geliştirme için:

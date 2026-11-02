@@ -5,4 +5,4 @@ the PCB editor, schematic editor, project settings, nets, layers, design data,
 fabrication exports, and a raw scripting escape hatch as MCP tools.
 """
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
